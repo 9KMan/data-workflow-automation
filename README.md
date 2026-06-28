@@ -6,11 +6,103 @@
 
 ---
 
-## Quick Start
+## Business Problem Solved
+
+A small/mid-sized business needs to automate their data workflows so information moves cleanly from collection to action without manual work. The focus is practical implementation — not theory — with strong attention to reliability and clarity of data flow.
+
+**Core problem:** Manual data entry and transfer between forms, APIs, spreadsheets, and databases is error-prone and time-consuming. A single source of truth is needed.
+
+**Core solution:** A Python-powered data automation platform that pulls data from REST APIs, databases (PostgreSQL), and Excel/CSV files, transforms and structures data through ETL pipelines, exposes data via REST API for dashboards and downstream consumers, and triggers automated actions via n8n workflows.
+
+---
+
+## Scope
+
+The system has four layers; the implementation covers all of them.
+
+### 1. **Data Ingestion API**
+- REST endpoints for JSON, CSV, Excel file upload, and webhook payloads
+- Background job tracking (pending → running → done/failed)
+- Source-annotated raw storage with timestamps
+
+### 2. **ETL Pipeline**
+- Configurable transformation rules stored in PostgreSQL (no code changes for new rules)
+- Built-in transformations: type coercion, date parsing, currency normalization, null handling
+- Custom transformation hooks: define Python functions registered via API
+- Retry logic: 3 attempts with exponential backoff on transient failures
+
+### 3. **Data Storage & Query API**
+- Three-tier storage: `raw_data` → `staging_data` → `processed_data`
+- Query API with pagination, filtering, aggregation, and CSV/JSON export
+- Transformation rules stored in `transformation_rules` table
+
+### 4. **Automation Triggers (n8n Integration)**
+- Trigger n8n webhooks on data events (new data, data changed, threshold exceeded, scheduled)
+- Configurable webhook URL per pipeline
+- Internal `POST /api/v1/automate/trigger` for event-driven orchestration
+
+---
+
+## 🏗 Technical Stack
+
+| **Category** | **Tech** |
+|---|---|
+| **Languages & Runtimes** | Python |
+| **Web Frameworks** | FastAPI |
+| **Databases** | PostgreSQL |
+| **ORMs** | SQLAlchemy |
+| **Infrastructure** | Docker |
+| **Automation** | n8n |
+
+_See SPEC.md for the full tech stack and rationale._
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  External Sources / Clients                    │
+│      (CSV, Excel, JSON, REST APIs, Webhooks, Browsers)        │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Your Platform — FastAPI + SQLAlchemy             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │  Ingest     │  │    ETL      │  │   Data Query     │  │
+│  │  Router     │──│  Pipeline   │──│   Router         │  │
+│  └──────────────┘  └──────────────┘  └──────────────────┘  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              ▼                             ▼
+┌─────────────────────────┐   ┌─────────────────────────────┐
+│   PostgreSQL Database    │   │   External Services          │
+│   raw_data / processed_ │   │   (n8n, Slack, Stripe, CRM)  │
+│   data / pipeline_runs  │   │                             │
+└─────────────────────────┘   └─────────────────────────────┘
+```
+
+---
+
+## ✅ Acceptance Criteria
+
+1. **API endpoint working end-to-end** — at minimum one data ingestion or query flow from request to database response
+2. **Database models** — schema defined with ≥3 entities, migrations ready
+3. **Authentication** — JWT or session auth on at least one protected endpoint
+4. **ETL pipeline** — at least one transformation from raw input to structured output
+5. **Tests** — pytest with ≥5 passing tests covering core functionality
+6. **Docker** — project builds and runs via `docker compose up --build`
+7. **README** — complete run instructions, architecture diagram, and feature list
+
+---
+
+## 🚀 Quick Start
 
 ```bash
 # 1. Clone and enter
-git clone <repo> && cd <repo>
+git clone https://github.com/9KMan/data-workflow-automation.git && cd data-workflow-automation
 
 # 2. Configure environment
 cp .env.example .env
@@ -26,273 +118,10 @@ curl http://localhost:8000/api/v1/health/
 
 ---
 
-## Architecture
+## 📦 What's in this repo
 
-```
-                              ┌─────────────────────┐
-                              │   External Sources   │
-                              │  (CSV, Excel, JSON,  │
-                              │   Webhooks, REST)    │
-                              └─────────┬───────────┘
-                                        │ POST /api/v1/ingest/*
-                                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   Data & Workflow Automation API              │
-│                     FastAPI + SQLAlchemy                      │
-│  ┌──────────┐  ┌───────────┐  ┌───────────┐  ┌─────────┐  │
-│  │  Ingest  │  │    ETL    │  │   Data    │  │Automate │  │
-│  │  Router  │──│ Pipeline  │──│   Router  │  │ Router  │  │
-│  └──────────┘  └─────┬─────┘  └───────────┘  └────┬────┘  │
-│                       │                              │        │
-│              ┌────────▼────────┐         ┌──────────▼──────┐ │
-│              │ Transformation │         │  n8n Webhook    │ │
-│              │     Rules      │         │     Client      │ │
-│              └────────────────┘         └──────────┬──────┘ │
-└──────────────────────────────────────────────────────────────┘
-                                        │ POST /api/v1/automate/*
-                                        ▼
-                              ┌─────────────────────┐
-                              │   n8n Workflows     │
-                              │  (Email, Slack,     │
-                              │   CRM integrations)  │
-                              └─────────────────────┘
-                                        │
-                              ┌─────────▼───────────┐
-                              │    PostgreSQL DB      │
-                              │ raw_data / processed_ │
-                              │ data / pipeline_runs  │
-                              └──────────────────────┘
-```
-
----
-
-## Data Sources & Integrations
-
-| Source | Method | Endpoint | Status |
-|---|---|---|---|
-| CSV file upload | `multipart/form-data` | `POST /api/v1/ingest/csv` | ✅ Ready |
-| Excel `.xlsx` upload | `multipart/form-data` | `POST /api/v1/ingest/excel` | ✅ Ready |
-| Arbitrary JSON | JSON body | `POST /api/v1/ingest/json` | ✅ Ready |
-| Webhooks (Stripe, Slack, etc.) | HTTP POST | `POST /api/v1/ingest/webhook/{source}` | ✅ Ready |
-| n8n automation triggers | HTTP POST | `POST /api/v1/automate/n8n-webhook` | ✅ Ready |
-| Direct data query | URL params | `GET /api/v1/data/{table}` | ✅ Ready |
-
----
-
-## Database Schema
-
-### `raw_data`
-Ingested data in original form.
-
-| Column | Type | Description |
-|---|---|---|
-| `id` | SERIAL PK | Auto-increment ID |
-| `source` | VARCHAR(100) | Source identifier (e.g. `csv_upload`, `webhook_stripe`) |
-| `ingested_at` | TIMESTAMP | Ingestion timestamp |
-| `payload` | JSON | Raw data as received |
-| `file_name` | VARCHAR(255) | Original file name (file uploads) |
-| `status` | VARCHAR(20) | `pending` / `running` / `done` / `failed` |
-
-### `transformation_rules`
-Configurable ETL rules — no code changes needed to add new transformations.
-
-| Column | Type | Description |
-|---|---|---|
-| `id` | SERIAL PK | Auto-increment ID |
-| `source_table` | VARCHAR(100) | Table/stream this rule applies to |
-| `target_table` | VARCHAR(100) | Where transformed data goes |
-| `field_name` | VARCHAR(255) | Field this rule operates on |
-| `transform_type` | VARCHAR(50) | `coerce` / `default` / `map` / `drop` / `custom` |
-| `transform_config` | JSON | Config for the transform |
-
-**Transform types:**
-
-| Type | Description | Example Config |
-|---|---|---|
-| `coerce` | Type conversion | `{"type": "float", "default": 0.0}` |
-| `default` | Fill nulls | `{"default": "unknown"}` |
-| `map` | Value lookup | `{"map": {"old": "new"}}` |
-| `drop` | Remove field | `{}` |
-| `custom` | Registered Python function | `{"fn": "my_transform"}` |
-
-### `pipeline_runs`
-Every ETL execution logged.
-
-| Column | Type | Description |
-|---|---|---|
-| `id` | SERIAL PK | Auto-increment ID |
-| `pipeline_name` | VARCHAR(100) | Name of the pipeline |
-| `status` | VARCHAR(20) | `running` / `done` / `failed` |
-| `rows_processed` | INT | Successfully processed rows |
-| `rows_failed` | INT | Failed rows |
-| `started_at` | TIMESTAMP | Run start time |
-| `finished_at` | TIMESTAMP | Run end time (null if running) |
-| `error_message` | TEXT | Error details if failed |
-
-### `processed_data`
-Final structured data ready for querying.
-
-| Column | Type | Description |
-|---|---|---|
-| `id` | SERIAL PK | Auto-increment ID |
-| `data_type` | VARCHAR(100) | Domain type (e.g. `orders`, `inventory`) |
-| `external_id` | VARCHAR(255) | ID from source system |
-| `payload` | JSON | Transformed data record |
-| `created_at` | TIMESTAMP | Record creation time |
-| `updated_at` | TIMESTAMP | Last update time |
-
----
-
-## CLI Reference
-
-### Local Development
-
-```bash
-# Install dependencies
-uv pip install -r requirements.txt
-
-# Run without Docker
-export DATABASE_URL="postgresql://automation:automation@localhost:5432/automation_db"
-export API_KEY="your-secret-key"
-export N8N_WEBHOOK_URL="http://localhost:5678/webhook/test"
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-# Run tests
-python -m pytest tests/ -v
-
-# Run with Docker
-docker compose up --build
-```
-
-### API Examples
-
-```bash
-# Health check
-curl http://localhost:8000/api/v1/health/
-
-# Ingest JSON
-curl -X POST http://localhost:8000/api/v1/ingest/json \
-  -H "X-API-Key: dev-api-key-change-me" \
-  -H "Content-Type: application/json" \
-  -d '{"order_id": "12345", "customer": "Alice", "total": 99.99}'
-
-# Ingest CSV (replace @file.csv with actual file path)
-curl -X POST http://localhost:8000/api/v1/ingest/csv \
-  -H "X-API-Key: dev-api-key-change-me" \
-  -F "file=@sample_data.csv"
-
-# Ingest Excel
-curl -X POST http://localhost:8000/api/v1/ingest/excel \
-  -H "X-API-Key: dev-api-key-change-me" \
-  -F "file=@sample_data.xlsx"
-
-# Check job status
-curl http://localhost:8000/api/v1/ingest/status/a1b2c3d4 \
-  -H "X-API-Key: dev-api-key-change-me"
-
-# Query processed data
-curl "http://localhost:8000/api/v1/data/processed_data?limit=10" \
-  -H "X-API-Key: dev-api-key-change-me"
-
-# Export as CSV
-curl "http://localhost:8000/api/v1/data/processed_data/export?format=csv" \
-  -H "X-API-Key: dev-api-key-change-me"
-
-# Aggregate data
-curl "http://localhost:8000/api/v1/data/processed_data/aggregate?group_by=data_type&agg_func=count" \
-  -H "X-API-Key: dev-api-key-change-me"
-
-# Trigger n8n automation
-curl -X POST http://localhost:8000/api/v1/automate/n8n-webhook \
-  -H "X-API-Key: dev-api-key-change-me" \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://n8n.example.com/webhook/my-workflow", "payload": {"order_id": "12345"}}'
-```
-
----
-
-## Quality Guarantees
-
-| Concern | Guarantee |
-|---|---|
-| **Reliability** | ETL pipeline retries 3× with exponential backoff on transient failures |
-| **Data integrity** | Transformation rules applied atomically per row; failed rows logged with error details |
-| **Observability** | Every pipeline run logged to `pipeline_runs` with row counts, timing, and error messages |
-| **Health** | `GET /api/v1/health/` returns DB connectivity status; `GET /api/v1/health/pipeline` returns pipeline statistics |
-| **Security** | API key required on all endpoints; no secrets in code; input validation on all uploads |
-| **Portability** | Single `docker compose up` brings up app + PostgreSQL; no external services required |
-| **Testability** | 25 pytest tests covering ETL transforms, parsers, pipeline logic, and API endpoints |
-| **Production-ready** | Structured JSON logging; CORS enabled; graceful startup/shutdown |
-
----
-
-## n8n Integration
-
-Connect n8n workflows to `/api/v1/automate/n8n-webhook` for:
-
-- **Email on pipeline failure** — n8n reads webhook payload → sends email alert
-- **Slack notifications** — n8n posts to Slack channel when data threshold exceeded
-- **CRM auto-tagging** — n8n reads new record → tags in HubSpot/Salesforce
-
-```
-n8n Workflow:
-  [Webhook Node] → [Switch/IF] → [Email / Slack / CRM]
-                         ↑
-  POST /api/v1/automate/n8n-webhook
-  Body: { "url": "...", "payload": {...} }
-```
-
----
-
-## Environment Variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `API_KEY` | `dev-api-key-change-me` | API key for all endpoints |
-| `DATABASE_URL` | `postgresql://...` | PostgreSQL connection string |
-| `N8N_WEBHOOK_URL` | `http://localhost:5678/webhook/test` | Default n8n webhook URL |
-| `ETL_MAX_RETRIES` | `3` | Max ETL retry attempts |
-| `ETL_BATCH_SIZE` | `1000` | Rows processed per batch |
-
----
-
-## Project Structure
-
-```
-<project>/
-├── SPEC.md                    ← Full specification
-├── README.md                  ← This file
-├── .env.example               ← Required env vars
-├── Dockerfile                 ← App container
-├── docker-compose.yml         ← App + PostgreSQL
-├── requirements.txt           ← Python deps
-├── pytest.ini                 ← Test configuration
-├── app/
-│   ├── main.py                ← FastAPI entry point
-│   ├── config.py              ← Environment config
-│   ├── database.py            ← SQLAlchemy engine + session
-│   ├── models.py              ← ORM models
-│   ├── schemas.py             ← Pydantic request/response schemas
-│   ├── routers/
-│   │   ├── ingest.py          ← POST /api/v1/ingest/*
-│   │   ├── data.py            ← GET /api/v1/data/*
-│   │   ├── automate.py        ← POST /api/v1/automate/*
-│   │   └── health.py          ← GET /api/v1/health/*
-│   ├── etl/
-│   │   ├── pipeline.py        ← ETL orchestration
-│   │   ├── transformers.py    ← Built-in transform functions
-│   │   └── registry.py        ← Custom transform registry
-│   └── services/
-│       ├── csv_parser.py      ← CSV ingestion
-│       ├── excel_parser.py    ← Excel ingestion
-│       └── n8n_client.py      ← n8n webhook caller
-├── tests/
-│   ├── conftest.py            ← Pytest fixtures
-│   ├── test_health.py         ← Health endpoint tests
-│   ├── test_parsers.py        ← CSV/Excel parser tests
-│   ├── test_pipeline.py       ← ETL pipeline tests
-│   └── test_transformers.py  ← Transform function tests
-└── docs/
-    ├── data-model.md           ← Database schema details
-    └── api-reference.md        ← Full API reference
-```
+- `SPEC.md` — full job specification (source of truth)
+- `ROADMAP.md` — phased delivery plan
+- `CLAUDE.md` — operating notes for AI build workers
+- `app/` — application source
+- `Dockerfile`, `docker-compose.yml` — container build
