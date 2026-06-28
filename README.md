@@ -60,29 +60,23 @@ _See SPEC.md for the full tech stack and rationale._
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  External Sources / Clients                    │
-│      (CSV, Excel, JSON, REST APIs, Webhooks, Browsers)        │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────┐
-│              Your Platform — FastAPI + SQLAlchemy             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │  Ingest     │  │    ETL      │  │   Data Query     │  │
-│  │  Router     │──│  Pipeline   │──│   Router         │  │
-│  └──────────────┘  └──────────────┘  └──────────────────┘  │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-              ┌──────────────┴──────────────┐
-              ▼                             ▼
-┌─────────────────────────┐   ┌─────────────────────────────┐
-│   PostgreSQL Database    │   │   External Services          │
-│   raw_data / processed_ │   │   (n8n, Slack, Stripe, CRM)  │
-│   data / pipeline_runs  │   │                             │
-└─────────────────────────┘   └─────────────────────────────┘
-```
+![Architecture Diagram](./diagrams/architecture.svg)
+
+> **Live diagram:** open [`diagrams/architecture.svg`](./diagrams/architecture.svg) in any browser for the full interactive version.  
+> _Or view locally: `xdg-open diagrams/architecture.svg`_
+
+### Component Overview
+
+| Layer | Component | Description |
+|---|---|---|
+| **External** | CSV / Excel / REST / Webhooks | Data sources and consumers |
+| **API** | Ingest Router | `POST /api/v1/ingest/{json,csv,excel}` |
+| **API** | ETL Pipeline | Extract → Transform → Load with retry |
+| **API** | Automation Router | `POST /api/v1/automate/{trigger,n8n-wh}` |
+| **API** | Data Query | `GET /data/{t}/aggregate/export/filter` |
+| **Data** | PostgreSQL | raw_data, staging_data, processed_data, pipeline_runs |
+| **Automation** | n8n | Slack, Stripe, CRM, scheduled workflows |
+| **Consumer** | Downstream | Grafana, BI dashboards, mobile, Google Sheets |
 
 ---
 
