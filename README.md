@@ -60,10 +60,11 @@ _See SPEC.md for the full tech stack and rationale._
 
 ## Architecture
 
-![Architecture Diagram](./diagrams/architecture.svg)
+<p align="center">
+  <img src="./diagrams/architecture.svg" alt="Architecture Diagram" width="900"/>
+</p>
 
-> **Live diagram:** open [`diagrams/architecture.svg`](./diagrams/architecture.svg) in any browser for the full interactive version.  
-> _Or view locally: `xdg-open diagrams/architecture.svg`_
+_Local view: `xdg-open diagrams/architecture.svg`_
 
 ### Component Overview
 
